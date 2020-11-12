@@ -18,6 +18,7 @@ train_data.fillna(method = 'ffill', inplace = True)
 #expand Image column into 96*96 vector
 train_images = train_data['Image'].str.split(' ', 96*96, expand = True)
 train_features = train_data.drop('Image', axis = 1)
+image_dir = 'F:/GATech/FA20/ISYE6740/Project/images/'
 
 for i in np.random.randint(low = 0, high = 7048, size = 10):
     
@@ -57,7 +58,7 @@ for i in np.random.randint(low = 0, high = 7048, size = 10):
         
     axes[1].imshow(image_copy)
 
-def generate_labels(images, features):
+def generate_labels(images, features, img_dir):
     
     feature_dict = {}
     for i in range(len(images)):
@@ -65,26 +66,55 @@ def generate_labels(images, features):
         img = images.iloc[i, :].to_numpy(dtype = np.float64)
         #get feature data
         ftrs = features.iloc[i, :]
-        # features are lists in form of x, y, xmax, ymax
-        feature_dict['img_{0}'.format(i)] = {
-                            'leye' : {'x' : ftrs['left_eye_inner_corner_x'], 'y' : ftrs['left_eye_inner_corner_y'] - 2,
-                                      'xmax' : ftrs['left_eye_outer_corner_x'], 'ymax' : ftrs['left_eye_outer_corner_y'] + 2},
-                            'reye' : {'x' : ftrs['right_eye_inner_corner_x'], 'y' : ftrs['right_eye_inner_corner_y'] - 2,
-                                      'xmax' : ftrs['right_eye_outer_corner_x'], 'ymax' : ftrs['right_eye_outer_corner_y'] + 2},
-                            'leyebrow' : {'x' : ftrs['left_eyebrow_inner_end_x'], 'y' : ftrs['left_eyebrow_inner_end_y'] - 2,
-                                      'xmax' : ftrs['left_eyebrow_outer_end_x'], 'ymax' : ftrs['left_eyebrow_outer_end_y'] + 2},
-                            'reyebrow' : {'x' : ftrs['right_eyebrow_inner_end_x'], 'y' : ftrs['right_eyebrow_inner_end_y'] - 2,
-                                      'xmax' : ftrs['right_eyebrow_outer_end_x'], 'ymax' : ftrs['right_eyebrow_outer_end_y'] + 2},
-                            'mouth' : {'x' : ftrs['mouth_left_corner_x'], 'y' : ftrs['mouth_left_corner_y'] - 2,
-                                      'xmax' : ftrs['mouth_right_corner_x'], 'ymax' : ftrs['mouth_right_corner_y'] + 2},
-                            'nose' : {'x' : ftrs['nose_tip_x'] - 8, 'y' : ftrs['nose_tip_y'] - 18,
-                                      'xmax' : ftrs['nose_tip_x'] + 8, 'ymax' : ftrs['nose_tip_y'] + 8}
+        # features are lists in form of x1, y1, x2, y2
+        feature_dict[img_dir + 'img_{0}'.format(i)] = {
+                            'leye' : {'x1' : ftrs['left_eye_inner_corner_x'], 'y1' : ftrs['left_eye_inner_corner_y'] - 2,
+                                      'x2' : ftrs['left_eye_outer_corner_x'], 'y2' : ftrs['left_eye_outer_corner_y'] + 2},
+                            'reye' : {'x1' : ftrs['right_eye_inner_corner_x'], 'y1' : ftrs['right_eye_inner_corner_y'] - 2,
+                                      'x2' : ftrs['right_eye_outer_corner_x'], 'y2' : ftrs['right_eye_outer_corner_y'] + 2},
+                            'leyebrow' : {'x1' : ftrs['left_eyebrow_inner_end_x'], 'y1' : ftrs['left_eyebrow_inner_end_y'] - 2,
+                                      'x2' : ftrs['left_eyebrow_outer_end_x'], 'y2' : ftrs['left_eyebrow_outer_end_y'] + 2},
+                            'reyebrow' : {'x1' : ftrs['right_eyebrow_inner_end_x'], 'y1' : ftrs['right_eyebrow_inner_end_y'] - 2,
+                                      'x2' : ftrs['right_eyebrow_outer_end_x'], 'y2' : ftrs['right_eyebrow_outer_end_y'] + 2},
+                            'mouth' : {'x1' : ftrs['mouth_left_corner_x'], 'y1' : ftrs['mouth_left_corner_y'] - 2,
+                                      'x2' : ftrs['mouth_right_corner_x'], 'y2' : ftrs['mouth_right_corner_y'] + 2},
+                            'nose' : {'x1' : ftrs['nose_tip_x'] - 8, 'y1' : ftrs['nose_tip_y'] - 18,
+                                      'x2' : ftrs['nose_tip_x'] + 8, 'y2' : ftrs['nose_tip_y'] + 8}
                             }
-    #convert dictionary to df and orient by index of img_id, feature
+    #convert dictionary1 to df and orient by1 index of img_id, feature
     feature_df = pd.DataFrame.from_dict({(i,j): feature_dict[i][j] 
                            for i in feature_dict.keys() 
                            for j in feature_dict[i].keys()},
                        orient = 'index')
+    feature_df.reset_index(inplace = True)
+    feature_df = feature_df.rename(columns = {'level_0' : 'filepath', 'level_1' : 'class_name'})
+    feature_df = feature_df[['filepath', 'x1', 'y1', 'x2', 'y2', 'class_name']]
+    #need to create rep index to drop later for reference in generating train/test set
+    feature_df['temp_idx'] = np.repeat(np.arange(0, len(images)), repeats=6, axis=0)
     return feature_df
+
+feature_df = generate_labels(train_images, train_features, image_dir)
+#create train/test data
+np.random.seed(27)
+trn_idx = np.random.choice(np.arange(len(train_images)), size = int(.75*len(train_images)), replace = False)
+tst_idx = np.array([i for i in range(0, len(train_images)) if i not in trn_idx])
+
+xtrain, ytrain = train_images.iloc[trn_idx, :], feature_df[feature_df['temp_idx'].isin(trn_idx)]
+xtest, ytest = train_images.iloc[tst_idx, :], feature_df[feature_df['temp_idx'].isin(tst_idx)]
+
+ytrain.drop(['temp_idx'], axis = 1, inplace = True)
+ytest.drop(['temp_idx'], axis = 1, inplace = True)
+
+ytrain.to_csv('train_features.csv', index = False)
+ytest.to_csv('test_features.csv', index = False)
+
+def save_images(images, img_dir):
     
-feature_df = generate_labels(train_images, train_features)
+    for i in range(len(images)):
+        
+        img = images.iloc[i, :].to_numpy().reshape(96, 96).astype(np.int64)
+        cv2.imwrite(img_dir + 'img_{0}.jpg'.format(i), img)
+
+save_images(train_images, image_dir)
+
+    
