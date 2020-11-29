@@ -18,7 +18,9 @@ train_data.fillna(method = 'ffill', inplace = True)
 #expand Image column into 96*96 vector
 train_images = train_data['Image'].str.split(' ', 96*96, expand = True)
 train_features = train_data.drop('Image', axis = 1)
-image_dir = 'F:/GATech/FA20/ISYE6740/Project/images/'
+image_dir = 'F:/GATech/FA20/ISYE6740/Project/train_images/'
+test_dir = 'F:/GATech/FA20/ISYE6740/Project/test_images/'
+
 
 for i in np.random.randint(low = 0, high = 7048, size = 10):
     
@@ -58,6 +60,26 @@ for i in np.random.randint(low = 0, high = 7048, size = 10):
         
     axes[1].imshow(image_copy)
 
+for i in range(10):
+    
+    fig, axes = plt.subplots(nrows = 1, ncols = 2, figsize = (15, 12))
+    image = cv2.imread(image_dir + 'img_0.jpg')
+    image = cv2.resize(image, dsize = (288, 288), interpolation = cv2.INTER_CUBIC)
+    axes[0].imshow(image)
+    image_copy = image.copy()
+    features = ytrain.iloc[:6, :]
+    
+    for feature in features.iterrows():
+        
+        _, x1, y1, x2, y2, class_name = feature[1]
+        x1, y1, x2, y2 = int(x1*3), int(y1*3), int(x2*3), int(y2*3)
+        cv2.rectangle(image_copy, (x1, y1), (x2, y2), (255, 0, 0), 1)
+    
+    axes[1].imshow(image_copy)
+        
+    
+    
+
 def generate_labels(images, features, img_dir):
     
     feature_dict = {}
@@ -67,7 +89,7 @@ def generate_labels(images, features, img_dir):
         #get feature data
         ftrs = features.iloc[i, :]
         # features are lists in form of x1, y1, x2, y2
-        feature_dict[img_dir + 'img_{0}'.format(i)] = {
+        feature_dict[img_dir + 'img_{0}.jpg'.format(i)] = {
                             'leye' : {'x1' : ftrs['left_eye_inner_corner_x'], 'y1' : ftrs['left_eye_inner_corner_y'] - 2,
                                       'x2' : ftrs['left_eye_outer_corner_x'], 'y2' : ftrs['left_eye_outer_corner_y'] + 2},
                             'reye' : {'x1' : ftrs['right_eye_inner_corner_x'], 'y1' : ftrs['right_eye_inner_corner_y'] - 2,
@@ -94,6 +116,7 @@ def generate_labels(images, features, img_dir):
     return feature_df
 
 feature_df = generate_labels(train_images, train_features, image_dir)
+train_images['id'] = np.arange(0, len(train_images))
 #create train/test data
 np.random.seed(27)
 trn_idx = np.random.choice(np.arange(len(train_images)), size = int(.75*len(train_images)), replace = False)
@@ -105,16 +128,27 @@ xtest, ytest = train_images.iloc[tst_idx, :], feature_df[feature_df['temp_idx'].
 ytrain.drop(['temp_idx'], axis = 1, inplace = True)
 ytest.drop(['temp_idx'], axis = 1, inplace = True)
 
-ytrain.to_csv('train_features.csv', index = False)
-ytest.to_csv('test_features.csv', index = False)
+#recreate filepath observations for test data
+for i in range(len(ytest)):
+    
+    ftrs = ytest.iloc[i, :]
+    file_path = ftrs['filepath']
+    img_no = file_path.replace('train_images', 'test_images')
+    ytest.iloc[i, 0] = img_no
+
+ytrain.to_csv('train_features.csv', index = False, header = False)
+ytest.to_csv('test_features.csv', index = False, header = False)
 
 def save_images(images, img_dir):
     
     for i in range(len(images)):
         
-        img = images.iloc[i, :].to_numpy().reshape(96, 96).astype(np.int64)
-        cv2.imwrite(img_dir + 'img_{0}.jpg'.format(i), img)
-
-save_images(train_images, image_dir)
-
+        img_data = images.iloc[i, :]
+        img_id = img_data.iloc[-1]
+        img = images.iloc[i, :-1].to_numpy().reshape(96, 96).astype(np.int64)
+        cv2.imwrite(img_dir + 'img_{0}.jpg'.format(img_id), img)
+#save training images
+save_images(xtrain, image_dir)
+#save testing images
+save_images(xtest, test_dir)
     
